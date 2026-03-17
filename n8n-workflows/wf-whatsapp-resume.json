@@ -1,0 +1,131 @@
+{
+  "name": "wf-whatsapp-resume",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zapi-reply",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node_webhook_reply",
+      "name": "Webhook: Z-API Reply",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\n\n// Only process text replies, not new image messages\nconst isText = !!body.message?.textMessage || !!body.message?.conversation;\nif (!isText) return [];\n\n// Skip messages sent by the bot itself\nif (body.fromMe) return [];\n\nconst phone = body.phone;\nconst messageText = (body.message?.textMessage?.text ?? body.message?.conversation ?? '').trim();\nif (!phone || !messageText) return [];\n\nreturn [{ json: { phone, messageText } }];"
+      },
+      "id": "node_parse_reply",
+      "name": "Code: Parse WhatsApp Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "jobs", "mode": "name" },
+        "options": {
+          "where": {
+            "values": [
+              { "column": "phone", "condition": "equals", "value": "={{ $json.phone }}" },
+              { "column": "status", "condition": "equals", "value": "pending_price" }
+            ]
+          }
+        }
+      },
+      "id": "node_sheets_lookup",
+      "name": "Sheets: Lookup Pending Job by Phone",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "notes": "Find the most recent pending_price job for this phone number"
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $input.first().json;\nif (!job.jobId) return []; // No pending job found for this phone\n\nconst resumeUrl = job.resumeWebhookUrl;\nconst suggestedPrice = parseFloat(job.suggestedPrice ?? 0);\nconst messageText = $('Code: Parse WhatsApp Reply').first().json.messageText.toLowerCase().trim();\n\n// Parse price from text. Examples: \"350\", \"R$ 350\", \"350,00\", \"350.00\", \"ok\"\nlet price = suggestedPrice;\nlet action = 'approve';\n\nif (messageText === 'rejeitar' || messageText === 'cancelar' || messageText === 'nao' || messageText === 'não') {\n  action = 'reject';\n} else if (messageText !== 'ok' && messageText !== 'sim') {\n  const match = messageText.match(/[\\d]+[.,]?[\\d]*/);\n  if (match) {\n    price = parseFloat(match[0].replace(',', '.'));\n  }\n}\n\nif (action === 'approve' && (!price || price <= 0)) {\n  // Cannot parse price — reply asking for a valid value\n  return [{ json: { _invalid: true, phone: job.phone } }];\n}\n\nreturn [{ json: { resumeUrl, price, action, jobId: job.jobId, phone: job.phone, _invalid: false } }];"
+      },
+      "id": "node_parse_price",
+      "name": "Code: Parse Price from Reply",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._invalid }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "node_check_invalid",
+      "name": "IF: Invalid Price?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.z-api.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Client-Token", "value": "={{ $env.ZAPI_CLIENT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={ \"phone\": \"{{ $json.phone }}\", \"message\": \"⚠️ Não entendi o preço. Por favor, responda com um número (ex: _350_) ou _ok_ para confirmar o preço sugerido.\" }",
+        "options": {}
+      },
+      "id": "node_zapi_invalid",
+      "name": "HTTP: Z-API Ask Again",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 160]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.resumeUrl }}",
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={ \"price\": {{ $json.price }}, \"action\": \"{{ $json.action }}\", \"jobId\": \"{{ $json.jobId }}\" }",
+        "options": {}
+      },
+      "id": "node_post_resume",
+      "name": "HTTP: POST to n8n Resume URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 440]
+    }
+  ],
+  "connections": {
+    "Webhook: Z-API Reply": { "main": [[{ "node": "Code: Parse WhatsApp Reply", "type": "main", "index": 0 }]] },
+    "Code: Parse WhatsApp Reply": { "main": [[{ "node": "Sheets: Lookup Pending Job by Phone", "type": "main", "index": 0 }]] },
+    "Sheets: Lookup Pending Job by Phone": { "main": [[{ "node": "Code: Parse Price from Reply", "type": "main", "index": 0 }]] },
+    "Code: Parse Price from Reply": { "main": [[{ "node": "IF: Invalid Price?", "type": "main", "index": 0 }]] },
+    "IF: Invalid Price?": {
+      "main": [
+        [{ "node": "HTTP: Z-API Ask Again", "type": "main", "index": 0 }],
+        [{ "node": "HTTP: POST to n8n Resume URL", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["auto-parts"]
+}

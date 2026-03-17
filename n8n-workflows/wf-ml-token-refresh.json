@@ -1,0 +1,83 @@
+{
+  "name": "wf-ml-token-refresh",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 5 }] }
+      },
+      "id": "node_schedule",
+      "name": "Schedule: Every 5.5h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "notes": "Set to every 5 hours 30 minutes to refresh before 6-hour ML token expiry"
+    },
+    {
+      "parameters": {
+        "url": "https://api.mercadolibre.com/oauth/token",
+        "sendBody": true,
+        "contentType": "form-urlencoded",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "grant_type", "value": "refresh_token" },
+            { "name": "client_id", "value": "={{ $env.ML_CLIENT_ID }}" },
+            { "name": "client_secret", "value": "={{ $env.ML_CLIENT_SECRET }}" },
+            { "name": "refresh_token", "value": "={{ $env.ML_REFRESH_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node_ml_refresh",
+      "name": "HTTP: ML Token Refresh",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const { access_token, refresh_token } = $input.first().json;\nif (!access_token) throw new Error('Token refresh failed — no access_token in response');\n\n// Log success. In production, update your credential store or env vars.\n// For n8n Cloud: update the ML_ACCESS_TOKEN environment variable via n8n API\n// or store tokens in a dedicated Google Sheets cell.\nconsole.log('ML token refreshed at', new Date().toISOString());\n\nreturn [{ json: { access_token, refresh_token, refreshedAt: new Date().toISOString() } }];"
+      },
+      "id": "node_store_token",
+      "name": "Code: Store New Token",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "notes": "After getting the new token, update ML_ACCESS_TOKEN in n8n environment variables via n8n's REST API, or store in a Google Sheets 'config' tab and read from there in wf-intake."
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "config", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "ml_access_token": "={{ $json.access_token }}",
+            "ml_refresh_token": "={{ $json.refresh_token }}",
+            "last_refreshed": "={{ $json.refreshedAt }}"
+          },
+          "matchingColumns": ["key"]
+        },
+        "options": {}
+      },
+      "id": "node_sheets_config",
+      "name": "Sheets: Update ML Token in Config",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 300],
+      "notes": "Stores new tokens in a 'config' sheet. wf-intake must read ML_ACCESS_TOKEN from here rather than env if using this approach."
+    }
+  ],
+  "connections": {
+    "Schedule: Every 5.5h": { "main": [[{ "node": "HTTP: ML Token Refresh", "type": "main", "index": 0 }]] },
+    "HTTP: ML Token Refresh": { "main": [[{ "node": "Code: Store New Token", "type": "main", "index": 0 }]] },
+    "Code: Store New Token": { "main": [[{ "node": "Sheets: Update ML Token in Config", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["auto-parts"]
+}

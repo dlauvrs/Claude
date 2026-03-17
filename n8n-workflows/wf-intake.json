@@ -1,0 +1,453 @@
+{
+  "name": "wf-intake",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "zapi-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "node_webhook_intake",
+      "name": "Webhook: Z-API Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Acknowledge Z-API immediately\nconst body = $input.first().json.body;\nconst messageId = body.message?.messageId ?? body.messageId;\nconst phone = body.phone;\nconst msgType = body.message?.imageMessage ? 'image' : body.type;\n\nif (!messageId || !phone) {\n  throw new Error('Missing messageId or phone in Z-API payload');\n}\nif (msgType !== 'image' && !body.message?.imageMessage) {\n  // Not an image message — silently ignore\n  return [];\n}\n\nconst imageUrl = body.message?.imageMessage?.url;\nif (!imageUrl) throw new Error('No image URL in payload');\n\nreturn [{ json: { messageId, phone, imageUrl, chatName: body.chatName ?? '', timestamp: body.momment ?? Date.now() } }];"
+      },
+      "id": "node_extract_validate",
+      "name": "Code: Extract & Validate",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": ["jobId"]
+        },
+        "options": {}
+      },
+      "id": "node_check_duplicate",
+      "name": "Sheets: Check Duplicate",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [680, 300],
+      "notes": "Lookup jobId = messageId. If row exists, stop."
+    },
+    {
+      "parameters": {
+        "jsCode": "// If the Sheets lookup returned a row with this messageId, it's a duplicate — stop.\nconst existing = $input.first().json;\nif (existing.jobId) {\n  // Row found — duplicate\n  return [];\n}\n// Pass through\nreturn $input.all();"
+      },
+      "id": "node_dedupe_check",
+      "name": "Code: Dedupe Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.imageUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Client-Token", "value": "={{ $env.ZAPI_CLIENT_TOKEN }}" }
+          ]
+        },
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "node_download_image",
+      "name": "HTTP: Download Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://sdk.photoroom.com/v1/segment",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "x-api-key", "value": "={{ $env.PHOTOROOM_API_KEY }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "image_file", "value": "={{ $binary.data }}", "parameterType": "formBinaryData", "inputDataFieldName": "data" },
+            { "name": "bg_color", "value": "FFFFFF" },
+            { "name": "format", "value": "jpeg" },
+            { "name": "crop", "value": "false" }
+          ]
+        },
+        "options": { "response": { "response": { "responseFormat": "file" } } }
+      },
+      "id": "node_photoroom",
+      "name": "HTTP: PhotoRoom BG Removal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1340, 300]
+    },
+    {
+      "parameters": {
+        "operation": "resize",
+        "width": 1200,
+        "height": 1200,
+        "resizeOption": "contain",
+        "backgroundColor": "#FFFFFF",
+        "dataPropertyName": "data"
+      },
+      "id": "node_edit_image",
+      "name": "Edit Image: Resize 1200x1200",
+      "type": "n8n-nodes-base.editImage",
+      "typeVersion": 1,
+      "position": [1560, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer={{ $env.GOOGLE_DRIVE_ACCESS_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "file", "value": "={{ $binary.data }}", "parameterType": "formBinaryData", "inputDataFieldName": "data" },
+            { "name": "metadata", "value": "={\"name\": \"{{ $('Code: Extract & Validate').item.json.messageId }}_{{ $itemIndex }}.jpg\", \"parents\": [\"{{ $env.GOOGLE_DRIVE_FOLDER_ID }}\"]}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "node_upload_drive",
+      "name": "HTTP: Upload to Google Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1780, 300],
+      "notes": "Upload processed image to Google Drive. Use Drive node instead if credentials are configured."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Make Drive file public and build the public URL\nconst fileId = $input.first().json.id;\nreturn [{ json: { fileId, publicUrl: `https://drive.google.com/uc?id=${fileId}&export=download` } }];"
+      },
+      "id": "node_build_public_url",
+      "name": "Code: Build Public Drive URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2000, 300],
+      "notes": "After upload, set file permission to public via Drive API, then construct URL"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Accumulate all processed photo URLs from the batch loop\n// This runs after SplitInBatches finishes all items\nconst allUrls = $input.all().map(item => item.json.publicUrl);\nconst firstItem = $('Code: Extract & Validate').first().json;\n\nreturn [{\n  json: {\n    messageId: firstItem.messageId,\n    phone: firstItem.phone,\n    chatName: firstItem.chatName,\n    photoUrls: allUrls,\n    timestamp: firstItem.timestamp\n  }\n}];"
+      },
+      "id": "node_accumulate_images",
+      "name": "Code: Accumulate Photo URLs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2220, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "key", "value": "={{ $env.GEMINI_API_KEY }}" }]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"contents\": [{\n    \"parts\": [\n      {{ $json.photoUrls.map((url, i) => JSON.stringify({ inlineData: { mimeType: 'image/jpeg', data: '' } })).join(',\\n      ') }},\n      {\n        \"text\": \"You are an automotive parts identification system for a Brazilian used auto parts marketplace (Mercado Livre).\\n\\nAnalyze all provided photos of the same auto part and return ONLY a valid JSON object with no markdown, no explanation, matching this exact schema:\\n\\n{\\n  \\\"partId\\\": \\\"string - manufacturer part number if visible, else empty string\\\",\\n  \\\"title\\\": \\\"string - max 60 chars, Portuguese, format: [Part Name] [Brand] [Vehicle] [Year Range]\\\",\\n  \\\"description\\\": \\\"string - 3-5 sentences in Portuguese describing condition, compatibility, any visible damage or wear, what is included\\\",\\n  \\\"suggestedPrice\\\": number,\\n  \\\"mlCategoryId\\\": \\\"string - most specific Mercado Livre Brazil category ID\\\",\\n  \\\"color\\\": \\\"string - part color in Portuguese, e.g. Preto, Prata, Branco\\\",\\n  \\\"vehicleCompatibilities\\\": [{ \\\"make\\\": \\\"string\\\", \\\"model\\\": \\\"string\\\", \\\"yearFrom\\\": number, \\\"yearTo\\\": number }],\\n  \\\"photoSortOrder\\\": [number]\\n}\\n\\nRules:\\n- title MUST be 60 characters or fewer\\n- suggestedPrice must be a realistic BRL used-parts market price\\n- photoSortOrder must contain all photo indices exactly once, best photo first\\n- If unsure, title = Peca Automotiva Usada\"\n      }\n    ]\n  }],\n  \"generationConfig\": { \"temperature\": 0.2, \"maxOutputTokens\": 1024 }\n}",
+        "options": {}
+      },
+      "id": "node_gemini",
+      "name": "HTTP: Gemini Vision Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2440, 300],
+      "notes": "IMPORTANT: Replace inlineData.data with actual base64 image data. Use a Code node before this to build the parts array dynamically from binary data."
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';\nlet analysis;\ntry {\n  // Strip markdown code fences if present\n  const cleaned = raw.replace(/^```json\\n?|```$/g, '').trim();\n  analysis = JSON.parse(cleaned);\n} catch {\n  throw new Error('Gemini returned invalid JSON: ' + raw.substring(0, 200));\n}\n\nconst acc = $('Code: Accumulate Photo URLs').first().json;\n\n// Reorder photos by Gemini's recommended sort order\nconst sortOrder = analysis.photoSortOrder ?? acc.photoUrls.map((_, i) => i);\nconst sortedUrls = sortOrder.map((i) => acc.photoUrls[i]).filter(Boolean);\n\nreturn [{\n  json: {\n    jobId: acc.messageId,\n    phone: acc.phone,\n    chatName: acc.chatName,\n    partId: analysis.partId ?? '',\n    title: (analysis.title ?? 'Peça Automotiva Usada').substring(0, 60),\n    description: analysis.description ?? '',\n    suggestedPrice: analysis.suggestedPrice ?? 0,\n    mlCategoryId: analysis.mlCategoryId ?? '',\n    color: analysis.color ?? '',\n    vehicleCompat: JSON.stringify(analysis.vehicleCompatibilities ?? []),\n    photoUrls: JSON.stringify(sortedUrls),\n    createdAt: new Date().toISOString(),\n    rawGeminiResponse: raw\n  }\n}];"
+      },
+      "id": "node_parse_gemini",
+      "name": "Code: Parse Gemini Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "jobId": "={{ $json.jobId }}",
+            "status": "pending_price",
+            "phone": "={{ $json.phone }}",
+            "partId": "={{ $json.partId }}",
+            "title": "={{ $json.title }}",
+            "description": "={{ $json.description }}",
+            "suggestedPrice": "={{ $json.suggestedPrice }}",
+            "finalPrice": "",
+            "mlCategoryId": "={{ $json.mlCategoryId }}",
+            "color": "={{ $json.color }}",
+            "vehicleCompat": "={{ $json.vehicleCompat }}",
+            "photoUrls": "={{ $json.photoUrls }}",
+            "resumeWebhookUrl": "={{ $execution.resumeUrl }}",
+            "mlListingId": "",
+            "mlListingUrl": "",
+            "createdAt": "={{ $json.createdAt }}",
+            "publishedAt": "",
+            "rawGeminiResponse": "={{ $json.rawGeminiResponse }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node_sheets_write",
+      "name": "Sheets: Write Job Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [2880, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.z-api.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Client-Token", "value": "={{ $env.ZAPI_CLIENT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $('Code: Parse Gemini Response').item.json.phone }}\",\n  \"message\": \"✅ *Peça identificada!*\\n\\n*{{ $('Code: Parse Gemini Response').item.json.title }}*\\n\\nPreço sugerido: *R$ {{ $('Code: Parse Gemini Response').item.json.suggestedPrice }}*\\n\\nResponda com o preço desejado (ex: _350_) ou envie *ok* para confirmar o preço sugerido.\\n\\n🔗 Revisar no dashboard: {{ $env.NEXT_PUBLIC_APP_URL }}/job/{{ $('Code: Parse Gemini Response').item.json.jobId }}\"\n}",
+        "options": {}
+      },
+      "id": "node_zapi_notify",
+      "name": "HTTP: Z-API Notify Employee",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3100, 300]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "options": {}
+      },
+      "id": "node_wait",
+      "name": "Wait: Price Approval",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3320, 300],
+      "notes": "Pauses execution. Resume URL is automatically available as $execution.resumeUrl (already written to Sheets). Resumes when /api/approve or wf-whatsapp-resume POSTs to the resume URL."
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json.body ?? $input.first().json;\nconst action = payload.action;\nconst price = parseFloat(payload.price ?? 0);\nconst jobId = payload.jobId;\n\nif (action === 'reject') {\n  return [{ json: { action: 'reject', price: 0, jobId, _stop: true } }];\n}\nif (!price || price <= 0) {\n  throw new Error('Invalid price received in resume payload');\n}\nreturn [{ json: { action: 'approve', price, jobId, _stop: false } }];"
+      },
+      "id": "node_extract_price",
+      "name": "Code: Extract Price from Resume",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3540, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true },
+          "conditions": [
+            {
+              "id": "reject_condition",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "reject",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ]
+        }
+      },
+      "id": "node_route_action",
+      "name": "IF: Rejected?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [3760, 300]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "status": "rejected" },
+          "matchingColumns": ["jobId"]
+        },
+        "options": {}
+      },
+      "id": "node_sheets_reject",
+      "name": "Sheets: Mark Rejected",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [3980, 160]
+    },
+    {
+      "parameters": {
+        "url": "https://api.mercadolibre.com/items",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer={{ $env.ML_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"title\": \"{{ $('Code: Parse Gemini Response').item.json.title }}\",\n  \"category_id\": \"{{ $('Code: Parse Gemini Response').item.json.mlCategoryId }}\",\n  \"condition\": \"used\",\n  \"listing_type_id\": \"gold_special\",\n  \"price\": {{ $json.price }},\n  \"currency_id\": \"BRL\",\n  \"available_quantity\": 1,\n  \"buying_mode\": \"buy_it_now\",\n  \"description\": { \"plain_text\": \"{{ $('Code: Parse Gemini Response').item.json.description }}\" },\n  \"pictures\": {{ JSON.parse($('Code: Parse Gemini Response').item.json.photoUrls).map(url => ({ source: url })) }},\n  \"shipping\": {\n    \"mode\": \"me2\",\n    \"free_shipping\": false,\n    \"local_pick_up\": true\n  },\n  \"attributes\": [\n    { \"id\": \"COLOR\", \"value_name\": \"{{ $('Code: Parse Gemini Response').item.json.color }}\" },\n    { \"id\": \"ITEM_CONDITION\", \"value_id\": \"2230581\" }\n  ],\n  \"sale_terms\": [\n    { \"id\": \"WARRANTY_TYPE\", \"value_name\": \"Sem garantia\" }\n  ]\n}",
+        "options": {}
+      },
+      "id": "node_ml_post",
+      "name": "HTTP: ML Post Listing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3980, 440]
+    },
+    {
+      "parameters": {
+        "url": "=https://api.mercadolibre.com/items/{{ $json.id }}/compatibilities",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer={{ $env.ML_ACCESS_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={ \"compatibilities\": {{ $('Code: Parse Gemini Response').item.json.vehicleCompat }} }",
+        "options": {}
+      },
+      "id": "node_ml_patch_compat",
+      "name": "HTTP: ML Patch Compatibilities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4200, 440]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "jobs", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "status": "published",
+            "finalPrice": "={{ $('Code: Extract Price from Resume').item.json.price }}",
+            "mlListingId": "={{ $('HTTP: ML Post Listing').item.json.id }}",
+            "mlListingUrl": "={{ $('HTTP: ML Post Listing').item.json.permalink }}",
+            "publishedAt": "={{ new Date().toISOString() }}"
+          },
+          "matchingColumns": ["jobId"]
+        },
+        "options": {}
+      },
+      "id": "node_sheets_update",
+      "name": "Sheets: Update Published",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [4420, 440]
+    },
+    {
+      "parameters": {
+        "url": "https://api.z-api.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Client-Token", "value": "={{ $env.ZAPI_CLIENT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $('Code: Parse Gemini Response').item.json.phone }}\",\n  \"message\": \"🎉 *Anúncio publicado com sucesso!*\\n\\n{{ $('Code: Parse Gemini Response').item.json.title }}\\nPreço: R$ {{ $('Code: Extract Price from Resume').item.json.price }}\\n\\n🔗 {{ $('HTTP: ML Post Listing').item.json.permalink }}\"\n}",
+        "options": {}
+      },
+      "id": "node_zapi_confirm",
+      "name": "HTTP: Z-API Send Confirmation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4640, 440]
+    }
+  ],
+  "connections": {
+    "Webhook: Z-API Intake": { "main": [[{ "node": "Code: Extract & Validate", "type": "main", "index": 0 }]] },
+    "Code: Extract & Validate": { "main": [[{ "node": "Sheets: Check Duplicate", "type": "main", "index": 0 }]] },
+    "Sheets: Check Duplicate": { "main": [[{ "node": "Code: Dedupe Guard", "type": "main", "index": 0 }]] },
+    "Code: Dedupe Guard": { "main": [[{ "node": "HTTP: Download Image", "type": "main", "index": 0 }]] },
+    "HTTP: Download Image": { "main": [[{ "node": "HTTP: PhotoRoom BG Removal", "type": "main", "index": 0 }]] },
+    "HTTP: PhotoRoom BG Removal": { "main": [[{ "node": "Edit Image: Resize 1200x1200", "type": "main", "index": 0 }]] },
+    "Edit Image: Resize 1200x1200": { "main": [[{ "node": "HTTP: Upload to Google Drive", "type": "main", "index": 0 }]] },
+    "HTTP: Upload to Google Drive": { "main": [[{ "node": "Code: Build Public Drive URL", "type": "main", "index": 0 }]] },
+    "Code: Build Public Drive URL": { "main": [[{ "node": "Code: Accumulate Photo URLs", "type": "main", "index": 0 }]] },
+    "Code: Accumulate Photo URLs": { "main": [[{ "node": "HTTP: Gemini Vision Analysis", "type": "main", "index": 0 }]] },
+    "HTTP: Gemini Vision Analysis": { "main": [[{ "node": "Code: Parse Gemini Response", "type": "main", "index": 0 }]] },
+    "Code: Parse Gemini Response": { "main": [[{ "node": "Sheets: Write Job Row", "type": "main", "index": 0 }]] },
+    "Sheets: Write Job Row": { "main": [[{ "node": "HTTP: Z-API Notify Employee", "type": "main", "index": 0 }]] },
+    "HTTP: Z-API Notify Employee": { "main": [[{ "node": "Wait: Price Approval", "type": "main", "index": 0 }]] },
+    "Wait: Price Approval": { "main": [[{ "node": "Code: Extract Price from Resume", "type": "main", "index": 0 }]] },
+    "Code: Extract Price from Resume": { "main": [[{ "node": "IF: Rejected?", "type": "main", "index": 0 }]] },
+    "IF: Rejected?": {
+      "main": [
+        [{ "node": "Sheets: Mark Rejected", "type": "main", "index": 0 }],
+        [{ "node": "HTTP: ML Post Listing", "type": "main", "index": 0 }]
+      ]
+    },
+    "HTTP: ML Post Listing": { "main": [[{ "node": "HTTP: ML Patch Compatibilities", "type": "main", "index": 0 }]] },
+    "HTTP: ML Patch Compatibilities": { "main": [[{ "node": "Sheets: Update Published", "type": "main", "index": 0 }]] },
+    "Sheets: Update Published": { "main": [[{ "node": "HTTP: Z-API Send Confirmation", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": true,
+    "errorWorkflow": "wf-error-handler"
+  },
+  "staticData": null,
+  "tags": ["auto-parts"],
+  "meta": { "templateCredsSetupCompleted": false }
+}

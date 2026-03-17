@@ -1,0 +1,78 @@
+{
+  "name": "wf-error-handler",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "node_error_trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const err = $input.first().json;\nconst workflowName = err.workflow?.name ?? 'unknown';\nconst nodeName = err.execution?.lastNodeExecuted ?? 'unknown';\nconst errorMsg = err.execution?.error?.message ?? 'Unknown error';\nconst execUrl = err.execution?.url ?? '';\n\nreturn [{\n  json: {\n    workflowName,\n    nodeName,\n    errorMsg,\n    execUrl,\n    timestamp: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "node_parse_error",
+      "name": "Code: Parse Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://api.z-api.io/instances/{{ $env.ZAPI_INSTANCE_ID }}/token/{{ $env.ZAPI_TOKEN }}/send-text",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Client-Token", "value": "={{ $env.ZAPI_CLIENT_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $env.ADMIN_PHONE }}\",\n  \"message\": \"⚠️ *Erro no pipeline*\\n\\nWorkflow: {{ $json.workflowName }}\\nNó: {{ $json.nodeName }}\\nErro: {{ $json.errorMsg }}\\n\\nAcesse: {{ $json.execUrl }}\"\n}",
+        "options": {}
+      },
+      "id": "node_zapi_alert",
+      "name": "HTTP: Z-API Alert Admin",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "resource": "spreadsheet",
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_SHEETS_SPREADSHEET_ID }}",
+          "mode": "id"
+        },
+        "sheetName": { "__rl": true, "value": "log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "timestamp": "={{ $json.timestamp }}",
+            "jobId": "",
+            "event": "error",
+            "detail": "={{ $json.workflowName }} / {{ $json.nodeName }}: {{ $json.errorMsg }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "node_sheets_log",
+      "name": "Sheets: Append Error Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Error Trigger": { "main": [[{ "node": "Code: Parse Error", "type": "main", "index": 0 }]] },
+    "Code: Parse Error": { "main": [[{ "node": "HTTP: Z-API Alert Admin", "type": "main", "index": 0 }]] },
+    "HTTP: Z-API Alert Admin": { "main": [[{ "node": "Sheets: Append Error Log", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1" },
+  "tags": ["auto-parts"]
+}

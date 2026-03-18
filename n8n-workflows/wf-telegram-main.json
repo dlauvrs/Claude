@@ -1,0 +1,28 @@
+{
+  "_comment": "Generated workflow — edit via n8n Cloud UI or regenerate with build script.",
+  "_n8n_id": "oFUZfCg8NTiRRlW8",
+  "_url": "https://minasjapan.app.n8n.cloud/workflow/oFUZfCg8NTiRRlW8",
+  "name": "wf-telegram-main",
+  "description": "Single-trigger Telegram router: photo collection → Gemini analysis → PhotoRoom → ML publish → Wait for price. Also handles price/reject replies from employee.",
+  "replaces": ["wf-intake", "wf-whatsapp-resume"],
+  "credentials_needed": {
+    "telegramApi": "ZIG5ht6u62fQnlzP (Telegram account 3)",
+    "googleSheetsOAuth2Api": "5S7QpRc2dpxOAEV8 (Google Sheets account 2)",
+    "googleDrive": "configure in Google Drive nodes"
+  },
+  "env_vars_needed": [
+    "TELEGRAM_BOT_TOKEN",
+    "GEMINI_API_KEY",
+    "PHOTOROOM_API_KEY",
+    "GOOGLE_DRIVE_FOLDER_ID",
+    "ML_ACCESS_TOKEN",
+    "NEXT_PUBLIC_APP_URL",
+    "ADMIN_TELEGRAM_CHAT_ID"
+  ],
+  "sheets_tabs_needed": [
+    "jobs (cols A-R per schema)",
+    "pending_photos (cols: chat_id, file_ids, updated_at)",
+    "log (cols: timestamp, jobId, event, detail)"
+  ],
+  "flow": "Telegram Trigger -> Classify (photo/analyze/price/reject) -> Switch -> [photo: store file_id in Sheets] | [analyze: download+PhotoRoom+Gemini->Wait] | [price/reject: resume Wait via webhook URL]"
+}

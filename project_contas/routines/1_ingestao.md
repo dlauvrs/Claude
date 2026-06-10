@@ -16,7 +16,7 @@ echo "$IDENTIDADES_JSON" > /tmp/identidades.json
 
 As env vars disponíveis: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `SHEETS_ID`, `IDENTIDADES_JSON`, `GMAIL_DONO` (= daniellauvrs0@gmail.com).
 
-O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unread`, `get_message --id X`, `get_attachment --message-id X --attachment-id Y --out /tmp/f.pdf`, `mark_read --id X`, `send_email --to X --subject Y --body-file Z [--in-reply-to MSGID]`, `read_sheet --aba X`, `append_row --aba X --json '{...}'`, `update_row_by_id --aba X --id N --json '{...}'`.
+O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unread`, `get_message --id X`, `get_attachment --message-id X --attachment-id Y --out /tmp/f.pdf`, `mark_read --id X`, `trash --id X`, `archive --id X --label NOME`, `send_email --to X --subject Y --body-file Z [--in-reply-to MSGID]`, `read_sheet --aba X`, `append_row --aba X --json '{...}'`, `update_row_by_id --aba X --id N --json '{...}'`.
 
 ## Fluxo
 
@@ -62,7 +62,11 @@ Interprete linguagem natural. Casos:
 
 ## Tipo LIXO
 
-Apenas `mark_read`. Não delete nada.
+Três destinos conforme o subtipo:
+
+- **Lixo descartável** — promoções, marketing, newsletters, códigos de verificação/autorização (2FA, OTP), notificações automáticas de sistemas, erros de entrega de email, spam: `trash --id {id}` (vai pra lixeira do Gmail, recuperável por 30 dias).
+- **NFe / documento fiscal SEM cobrança** — nota fiscal avulsa, XML, DANFE que não vem acompanhado de boleto: NUNCA pra lixeira (tem valor contábil pra empresa). Use `archive --id {id} --label agente/nfe` — sai da caixa de entrada mas fica etiquetada e pesquisável.
+- **Em dúvida** se é relevante: apenas `mark_read`, deixe na caixa. Na incerteza, prefira sempre o destino mais conservador: mark_read > archive > trash. Uma caixa com um email a mais custa nada; uma conta real na lixeira custa multa.
 
 ## Regras gerais
 

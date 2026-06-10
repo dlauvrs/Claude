@@ -152,6 +152,36 @@ def add_label(message_id: str, label_id: str) -> None:
     ).execute()
 
 
+def trash_message(message_id: str) -> None:
+    """Move pra lixeira do Gmail (recuperavel por 30 dias)."""
+    svc = gmail_service()
+    svc.users().messages().trash(userId="me", id=message_id).execute()
+
+
+def get_or_create_label(name: str) -> str:
+    svc = gmail_service()
+    labels = svc.users().labels().list(userId="me").execute().get("labels", [])
+    for lbl in labels:
+        if lbl["name"] == name:
+            return lbl["id"]
+    created = svc.users().labels().create(
+        userId="me",
+        body={"name": name, "labelListVisibility": "labelShow", "messageListVisibility": "show"},
+    ).execute()
+    return created["id"]
+
+
+def archive_with_label(message_id: str, label_name: str) -> None:
+    """Tira da caixa de entrada (e de nao-lidos) e aplica etiqueta. Nada e deletado."""
+    svc = gmail_service()
+    label_id = get_or_create_label(label_name)
+    svc.users().messages().modify(
+        userId="me",
+        id=message_id,
+        body={"addLabelIds": [label_id], "removeLabelIds": ["INBOX", "UNREAD"]},
+    ).execute()
+
+
 def send_email(to: str, subject: str, body: str, in_reply_to: str | None = None) -> str:
     svc = gmail_service()
     msg = MIMEText(body, "plain", "utf-8")
@@ -247,6 +277,13 @@ def main() -> None:
     p_mark = sub.add_parser("mark_read")
     p_mark.add_argument("--id", required=True)
 
+    p_trash = sub.add_parser("trash")
+    p_trash.add_argument("--id", required=True)
+
+    p_arch = sub.add_parser("archive")
+    p_arch.add_argument("--id", required=True)
+    p_arch.add_argument("--label", required=True)
+
     p_send = sub.add_parser("send_email")
     p_send.add_argument("--to", required=True)
     p_send.add_argument("--subject", required=True)
@@ -279,6 +316,12 @@ def main() -> None:
     elif args.cmd == "mark_read":
         mark_read(args.id)
         print(json.dumps({"ok": True}))
+    elif args.cmd == "trash":
+        trash_message(args.id)
+        print(json.dumps({"trashed": True}))
+    elif args.cmd == "archive":
+        archive_with_label(args.id, args.label)
+        print(json.dumps({"archived": True, "label": args.label}))
     elif args.cmd == "send_email":
         with open(args.body_file, "r", encoding="utf-8") as f:
             body = f.read()

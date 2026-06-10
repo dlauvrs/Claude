@@ -20,7 +20,7 @@ import base64
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
 from typing import Any
 
@@ -199,6 +199,18 @@ def send_email(to: str, subject: str, body: str, in_reply_to: str | None = None)
 
 # ---------- Sheets ----------
 
+DATE_COLUMNS = ("vencimento", "data_pagamento", "criado_em")
+
+
+def _serial_to_iso(value: Any) -> Any:
+    """Sheets devolve datas como serial (dias desde 1899-12-30) no UNFORMATTED_VALUE."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    if not 20000 <= value <= 80000:
+        return value
+    return (date(1899, 12, 30) + timedelta(days=int(value))).isoformat()
+
+
 def read_sheet(aba: str) -> list[dict[str, Any]]:
     svc = sheets_service()
     rng = f"{aba}!A:O"
@@ -212,6 +224,9 @@ def read_sheet(aba: str) -> list[dict[str, Any]]:
     rows = []
     for v in values[1:]:
         row = {h: (v[i] if i < len(v) else "") for i, h in enumerate(headers)}
+        for col in DATE_COLUMNS:
+            if col in row:
+                row[col] = _serial_to_iso(row[col])
         rows.append(row)
     return rows
 

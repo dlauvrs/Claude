@@ -22,9 +22,11 @@ O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unr
 
 1. `python project_contas/scripts/google_client.py list_unread` — se vazio, encerre silenciosamente (não envie nenhum email).
 2. Para cada email, `get_message` e decida o TIPO:
-   - **CONTA**: boleto, fatura, cobrança, mensalidade, conta de consumo (luz/água/internet), aviso de vencimento, nota fiscal com cobrança.
+   - **CONTA**: boleto, fatura FECHADA, cobrança, mensalidade, conta de consumo (luz/água/internet), aviso de vencimento, nota fiscal com cobrança.
    - **COMANDO**: email cujo remetente contém o endereço em `$GMAIL_DONO`. É o Daniel falando com você.
-   - **LIXO**: marketing, newsletter, comprovantes de coisas já pagas que não pedem ação, spam.
+   - **LIXO**: marketing, newsletter, comprovantes de coisas já pagas que não pedem ação, spam, **cotações/orçamentos de clientes** (cliente pedindo preço de peça NÃO é conta), **extratos parciais/diários de cartão** (o banco manda todo dia; só a FATURA FECHADA com valor e vencimento é conta).
+
+   **REGRA DE OURO**: se você não conseguiu extrair NEM valor, NEM vencimento, NEM linha digitável, então quase certamente NÃO é conta a pagar — trate como LIXO ou NFe. NUNCA grave linha na planilha sem pelo menos um vencimento. A única exceção é cobrança claramente real cujo boleto está num portal externo (aí grave com vencimento e observação explicando onde está o boleto).
 3. Processe cada um conforme o tipo (abaixo) e SEMPRE termine com `mark_read`.
 
 ## Tipo CONTA

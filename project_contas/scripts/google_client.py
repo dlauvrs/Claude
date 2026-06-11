@@ -234,7 +234,13 @@ def read_sheet(aba: str) -> list[dict[str, Any]]:
 def append_row(aba: str, data: dict[str, Any]) -> str:
     svc = sheets_service()
     existing = read_sheet(aba)
-    next_id = (max((int(r.get("id", 0) or 0) for r in existing), default=0)) + 1
+    ids_num = []
+    for r in existing:
+        try:
+            ids_num.append(int(r.get("id")))
+        except (TypeError, ValueError):
+            pass
+    next_id = max(ids_num, default=0) + 1
     data["id"] = next_id
     data.setdefault("criado_em", datetime.now().isoformat(timespec="seconds"))
     row = [data.get(h, "") for h in SHEET_HEADERS]

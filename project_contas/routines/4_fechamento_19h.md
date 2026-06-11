@@ -26,27 +26,35 @@ Env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `S
 
 ## Formato do email
 
+**FORMATO OBRIGATÓRIO: dentro de cada seção, agrupar por empresa** (ordem fixa: 🏭 Minas Sucata, 🚗 Minas Japan, 👤 Daniel, 📦 Outros; mostre subtotal por empresa e omita empresa sem itens naquela seção).
+
 ```
 Fechamento de hoje, {dia da semana} {DD/MM}:
 
-✅ PAGAS HOJE (R$ {total})
-- {descricao} — R$ {valor} [{empresa}]
+✅ PAGAS HOJE — R$ {total}
+🏭 MINAS SUCATA (R$ {subtotal})
+- {descricao} — R$ {valor}
+🚗 MINAS JAPAN (R$ {subtotal})
+- {descricao} — R$ {valor}
+👤 DANIEL / 📦 OUTROS idem
 (ou "Nenhum pagamento registrado hoje." — e se algo venceu hoje
 sem confirmação, pergunte se ele esqueceu de confirmar ou de pagar)
 
-⚠️ FICARAM ABERTAS (R$ {total})    ← só se houver
-- {vencia DD/MM} {descricao} — R$ {valor} [{empresa}]
+⚠️ FICARAM ABERTAS — R$ {total}    ← só se houver, mesmo agrupamento
+🏭 MINAS SUCATA (R$ {subtotal})
+- {vencia DD/MM} {descricao} — R$ {valor}
+...
 {Se algo está aberto há 2+ dias, escale o tom: pergunte se quer
 manter, se já pagou e esqueceu de confirmar, ou se há algum problema
 com essa conta.}
 
-📅 AMANHÃ ({dia da semana})
-- {descricao} — R$ {valor} [{empresa}]
+📅 AMANHÃ ({dia da semana}) — R$ {total}, agrupado por empresa
 (ou "Nada vence amanhã.")
 
 🔭 PRÓXIMOS 7 DIAS — R$ {total} em {n} contas
-{Resumo compacto por dia, só dias com contas: "Qui 13/06: R$ 2.340
-(3 contas, maior: aluguel Japan R$ 1.500)"}
+Por empresa: 🏭 R$ X ({n}) | 🚗 R$ Y ({n}) | 👤 R$ Z ({n}) | 📦 R$ W ({n})
+{Depois, resumo compacto por dia, só dias com contas: "Qui 13/06:
+R$ 2.340 (3 contas, maior: aluguel Japan R$ 1.500)"}
 
 💡 {1-3 frases SUAS: o dia foi bom ou ruim? A semana que vem começa
 pesada? Tem concentração de vencimento chegando? Alguma conta

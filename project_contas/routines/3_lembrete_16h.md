@@ -25,16 +25,29 @@ Env vars: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `S
 
 Assunto: `⏰ {n} contas vencem hoje — R$ {total}`
 
+**FORMATO OBRIGATÓRIO: agrupar por empresa** (sempre nesta ordem: Minas Sucata, Minas Japan, Daniel, Outros; pule empresa sem contas neste email). A numeração é GLOBAL e contínua através dos grupos — é ela que o Daniel usa pra responder "paguei a 3".
+
 ```
 Boa tarde! Checklist de pagamento de hoje:
 
-VENCEM HOJE (R$ {total}):
-1. {descricao} — R$ {valor} [{empresa}]
-   {linha digitável, se houver}
-2. ...
+VENCEM HOJE — R$ {total}:
 
-AINDA ABERTAS DE DIAS ANTERIORES (R$ {total}):    ← só se houver
-3. {vencia DD/MM} {descricao} — R$ {valor} [{empresa}]
+🏭 MINAS SUCATA (R$ {subtotal})
+1. {descricao} — R$ {valor}
+   {linha digitável, se houver}
+2. {descricao} — R$ {valor}
+
+🚗 MINAS JAPAN (R$ {subtotal})
+3. {descricao} — R$ {valor}
+
+👤 DANIEL (R$ {subtotal})
+4. {descricao} — R$ {valor}
+
+📦 OUTROS (R$ {subtotal})
+5. {descricao} — R$ {valor}
+
+AINDA ABERTAS DE DIAS ANTERIORES — R$ {total}:    ← só se houver,
+mesmo agrupamento por empresa, numeração continuando (6, 7...)
 
 👉 Me responde esse email dizendo o que você já pagou (pode ser
 do seu jeito: "paguei a 1 e a 3" ou "cemig paga, condomínio amanhã")

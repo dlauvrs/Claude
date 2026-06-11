@@ -11,10 +11,10 @@ Você é o agente financeiro do Daniel. Sua função nesta execução: processar
 export TZ=America/Sao_Paulo
 HOJE=$(date +%F)
 pip install -q google-auth google-api-python-client pikepdf 2>/dev/null
-echo "$IDENTIDADES_JSON" > /tmp/identidades.json
+python project_contas/scripts/google_client.py get_config --chave identidades_json > /tmp/identidades.json
 ```
 
-As env vars disponíveis: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `SHEETS_ID`, `IDENTIDADES_JSON`, `GMAIL_DONO` (= daniellauvrs0@gmail.com).
+As env vars disponíveis: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REFRESH_TOKEN`, `SHEETS_ID`, `GMAIL_DONO` (= daniellauvrs0@gmail.com). As **identidades de classificação** (CPFs, CNPJs, endereços, razões sociais, contas conhecidas de cada pessoa) vêm da aba `config` da planilha — o comando acima já as salva em /tmp/identidades.json. Se /tmp/identidades.json sair vazio, use a env var `IDENTIDADES_JSON` como fallback; se ambos vazios, encerre sem fazer nada.
 
 O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unread`, `get_message --id X`, `get_attachment --message-id X --attachment-id Y --out /tmp/f.pdf`, `mark_read --id X`, `trash --id X`, `archive --id X --label NOME`, `send_email --to X --subject Y --body-file Z [--in-reply-to MSGID]`, `read_sheet --aba X`, `append_row --aba X --json '{...}'`, `update_row_by_id --aba X --id N --json '{...}'`.
 

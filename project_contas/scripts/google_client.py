@@ -279,6 +279,18 @@ def update_row_by_id(aba: str, row_id: int, updates: dict[str, Any]) -> bool:
     return False
 
 
+def get_config(chave: str) -> str:
+    """Le um valor da aba config (formato chave|valor)."""
+    svc = sheets_service()
+    resp = svc.spreadsheets().values().get(
+        spreadsheetId=sheet_id(), range="config!A:B"
+    ).execute()
+    for row in resp.get("values", []):
+        if row and row[0] == chave:
+            return row[1] if len(row) > 1 else ""
+    return ""
+
+
 # ---------- CLI ----------
 
 def main() -> None:
@@ -313,6 +325,9 @@ def main() -> None:
 
     p_read = sub.add_parser("read_sheet")
     p_read.add_argument("--aba", required=True)
+
+    p_cfg = sub.add_parser("get_config")
+    p_cfg.add_argument("--chave", required=True)
 
     p_app = sub.add_parser("append_row")
     p_app.add_argument("--aba", required=True)
@@ -350,6 +365,8 @@ def main() -> None:
         print(json.dumps({"message_id": msg_id}))
     elif args.cmd == "read_sheet":
         print(json.dumps(read_sheet(args.aba), ensure_ascii=False, default=str))
+    elif args.cmd == "get_config":
+        print(get_config(args.chave))
     elif args.cmd == "append_row":
         data = json.loads(args.json)
         new_id = append_row(args.aba, data)

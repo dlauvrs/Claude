@@ -23,7 +23,7 @@ O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unr
 1. `python project_contas/scripts/google_client.py list_unread` — se vazio, encerre silenciosamente (não envie nenhum email).
 2. Para cada email, `get_message` e decida o TIPO:
    - **CONTA**: boleto, fatura FECHADA, cobrança, mensalidade, conta de consumo (luz/água/internet), aviso de vencimento, nota fiscal com cobrança.
-   - **COMANDO**: email cujo remetente contém o endereço em `$GMAIL_DONO`. É o Daniel falando com você.
+   - **COMANDO**: email cujo remetente contém o endereço em `$GMAIL_DONO` (o Daniel — pode tudo), OU um dos emails de `por_categoria` em `get_config --chave destinatarios_json` (representante da empresa — pode APENAS confirmar/perguntar sobre contas da própria categoria).
    - **LIXO**: marketing, newsletter, comprovantes de coisas já pagas que não pedem ação, spam, **cotações/orçamentos de clientes** (cliente pedindo preço de peça NÃO é conta), **extratos parciais/diários de cartão** (o banco manda todo dia; só a FATURA FECHADA com valor e vencimento é conta).
 
    **REGRA DE OURO**: se você não conseguiu extrair NEM valor, NEM vencimento, NEM linha digitável, então quase certamente NÃO é conta a pagar — trate como LIXO ou NFe. NUNCA grave linha na planilha sem pelo menos um vencimento. A única exceção é cobrança claramente real cujo boleto está num portal externo (aí grave com vencimento e observação explicando onde está o boleto).
@@ -53,7 +53,11 @@ O script `project_contas/scripts/google_client.py` expõe os comandos: `list_unr
    - `observacoes`: qualquer coisa relevante (ex. "PDF com senha 09570", "classificação incerta — sem documento do sacado, fui pelo endereço")
 6. Se NÃO conseguiu classificar com confiança, grave em `outros` com `identificador_destino: "desconhecido"` e observação explicando o que encontrou — NUNCA invente categoria.
 
-## Tipo COMANDO (email do Daniel)
+## Tipo COMANDO (email do Daniel ou de representante de empresa)
+
+**Escopo por remetente**: o Daniel (`$GMAIL_DONO`) comanda tudo. Um remetente de `por_categoria` (ex.: minassucata@hotmail.com) só pode confirmar pagamentos, perguntar e corrigir contas DA PRÓPRIA categoria — se pedir algo fora do escopo (outra empresa, mudança de regra), responda educadamente que isso só o Daniel pode e NÃO execute.
+
+**Numeração**: quando a resposta referencia números ("paguei a 1 e a 3"), localize na thread o email QUE VOCÊ enviou (o In-Reply-To/References aponta pra ele) e mapeie os números pela numeração DAQUELE email — o checklist consolidado e os checklists por empresa têm numerações independentes.
 
 Interprete linguagem natural. Casos:
 

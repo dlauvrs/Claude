@@ -89,6 +89,17 @@ comparação com a semana anterior (total pago), contas atípicas vs
 recorrente, concentrações. Se houver atrasadas, cobre resolução.}
 ```
 
+## Envios por categoria (depois do consolidado)
+
+Leia `python project_contas/scripts/google_client.py get_config --chave destinatarios_json`. Para CADA categoria listada em `por_categoria` com destinatários:
+- Monte uma versão do MESMO brief contendo APENAS as contas daquela categoria (sem as outras empresas, sem os totais gerais).
+- Assunto com o nome da empresa, ex.: `☀️ Minas Sucata — contas de hoje {DD/MM} — R$ {total}`.
+- A seção 💡 deve falar só daquela empresa.
+- Envie para cada endereço da lista via `send_email`.
+- Se a categoria não tiver nenhuma conta no período, envie a versão curta ("✅ Nada vence hoje na {empresa}" + próximo vencimento dela).
+
+O consolidado completo vai SEMPRE para os endereços de `consolidado` (o Daniel) — os envios por categoria são adicionais, nunca substituem.
+
 ## Regras
 
 - Valores formato BR (R$ 1.234,56). Dentro de cada empresa, ordene por valor decrescente.

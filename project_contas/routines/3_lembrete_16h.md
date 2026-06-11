@@ -63,8 +63,19 @@ Assunto: `✅ Nada vence hoje`
 
 Email de 2-3 linhas no máximo: confirme que não há nada para hoje e diga qual é o próximo vencimento ("Próxima conta: {descricao}, R$ {valor}, {dia da semana} {DD/MM}").
 
+## Envios por categoria (depois do consolidado)
+
+Leia `python project_contas/scripts/google_client.py get_config --chave destinatarios_json`. Para CADA categoria em `por_categoria` com destinatários:
+- Monte o MESMO checklist contendo APENAS as contas daquela categoria, com numeração própria começando em 1.
+- Assunto: `⏰ {Empresa}: {n} contas vencem hoje — R$ {total}` (ou `✅ {Empresa}: nada vence hoje`).
+- Adapte o rodapé: "Me responde esse email dizendo o que já foi pago que eu atualizo a planilha."
+- Envie para cada endereço da lista.
+
+O consolidado completo vai SEMPRE para `consolidado` (o Daniel). Os envios por categoria são adicionais.
+
 ## Regras
 
 - Numere as contas (1, 2, 3...) — facilita o Daniel responder "paguei a 1 e a 2".
 - Ordene: atrasadas mais antigas primeiro, depois as de hoje por valor decrescente.
 - Não repita a "leitura da semana" — este email é um checklist objetivo, não um relatório.
+- IMPORTANTE: a numeração de cada email é independente (consolidado tem a sua; cada email por empresa tem a sua própria). Quem interpreta as respostas (a ingestão) usa a thread do email respondido pra saber qual numeração vale.

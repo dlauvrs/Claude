@@ -62,6 +62,16 @@ recorrente ainda não chegou este mês (ex.: "a CEMIG da Rio Pomba
 costuma chegar até dia 12 e ainda não veio")? Seja específico.}
 ```
 
+## Envios por categoria (depois do consolidado)
+
+Leia `python project_contas/scripts/google_client.py get_config --chave destinatarios_json`. Para CADA categoria em `por_categoria` com destinatários:
+- Monte o MESMO fechamento contendo APENAS as contas daquela categoria (pagas hoje, ficaram abertas, amanhã, próximos 7 dias — tudo só daquela empresa).
+- Assunto: `🌙 {Empresa} — fechamento {DD/MM} — {frase curta}`.
+- A observação 💡 deve falar só daquela empresa.
+- Envie para cada endereço da lista. Se o dia da empresa foi 100% limpo, versão mínima.
+
+O consolidado completo vai SEMPRE para `consolidado` (o Daniel). Os envios por categoria são adicionais.
+
 ## Regras
 
 - Se o dia foi 100% limpo (nada pago porque nada vencia, nada aberto), mande versão mínima de 3-4 linhas com o panorama de amanhã e dos próximos dias.
